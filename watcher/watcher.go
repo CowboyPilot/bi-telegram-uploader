@@ -1,17 +1,3 @@
-// Copyright 2023 Victor Antonovich <v.antonovich@gmail.com>
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package watcher
 
 import (
@@ -21,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
-
 	"github.com/rjeczalik/notify"
 )
 
@@ -41,7 +26,7 @@ type Event struct {
 }
 
 func NewWatcher(id uint, eventCh chan Event, d string, filePatterns []string) (*Watcher, error) {
-	// Check d exist and is a directory
+	// Check d exists and is a directory
 	fileinfo, err := os.Stat(d)
 	if err != nil {
 		return nil, err
@@ -53,13 +38,13 @@ func NewWatcher(id uint, eventCh chan Event, d string, filePatterns []string) (*
 	// Validate file name patterns
 	for _, fp := range filePatterns {
 		if _, err := filepath.Match(fp, d); err != nil {
-			return nil, fmt.Errorf("invaild file name pattern: %s", fp)
+			return nil, fmt.Errorf("invalid file name pattern: %s", fp)
 		}
 	}
 
-	// Create filesystem watcher
+	// Create filesystem watcher, monitoring all subdirectories
 	notifyCh := make(chan notify.EventInfo, 3)
-	err = notify.Watch(d, notifyCh, notify.InCloseWrite, notify.InMovedTo)
+	err = notify.Watch(filepath.Join(d, "..."), notifyCh, notify.All) // The "..." pattern watches all subdirectories recursively
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +94,10 @@ func (w *Watcher) Start() {
 					Id:   w.id,
 					Path: path,
 				}
+			}
+			// Dynamically add new directories to the watcher if needed
+			if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+				notify.Watch(filepath.Join(path, "..."), w.notifyCh, notify.All)
 			}
 			continue
 		case <-w.stopCh:
